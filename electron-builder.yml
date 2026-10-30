@@ -1,0 +1,29 @@
+appId: com.codeup.journal
+productName: Codeup提交日志
+directories:
+  output: release
+  buildResources: build
+afterPack: scripts/afterPack.js
+files:
+  - out/**/*
+extraResources:
+  - from: resources/icon.ico
+    to: icon.ico
+  - from: resources/icon.png
+    to: icon.png
+  - from: resources/icon-32.png
+    to: icon-32.png
+win:
+  icon: build/icon.ico
+  # 本机无开发者模式/管理员权限时，winCodeSign 解压符号链接会失败；跳过 exe 资源写入
+  signAndEditExecutable: false
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
