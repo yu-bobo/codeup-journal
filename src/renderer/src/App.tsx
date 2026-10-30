@@ -5,6 +5,7 @@ import {
   FileTextOutlined,
   HistoryOutlined,
   MoonOutlined,
+  ProfileOutlined,
   ReloadOutlined,
   SettingOutlined,
   SunOutlined,
@@ -17,10 +18,11 @@ import { useAppTheme } from './theme'
 import AccountsPage from './pages/AccountsPage'
 import ReposPage from './pages/ReposPage'
 import CommitsPage from './pages/CommitsPage'
+import SyncLogsPage from './pages/SyncLogsPage'
 import ReportsPage from './pages/ReportsPage'
 import SettingsPage from './pages/SettingsPage'
 
-type TabKey = 'accounts' | 'repos' | 'commits' | 'reports' | 'settings'
+type TabKey = 'accounts' | 'repos' | 'commits' | 'sync-logs' | 'reports' | 'settings'
 
 /**
  * 应用壳：顶栏账号切换 + 侧栏导航
@@ -55,6 +57,10 @@ export default function App() {
     message.success('已切换账号')
   }
 
+  const openSyncLogs = (): void => {
+    setTab('sync-logs')
+  }
+
   const onSync = async () => {
     if (!activeId) {
       message.warning('请先添加并选择账号')
@@ -65,8 +71,9 @@ export default function App() {
       const result = await getApi().sync.run(activeId)
       if (result.errors.length) {
         message.warning(
-          `同步完成：新增 ${result.inserted}，有 ${result.errors.length} 个错误（见同步日志）`
+          `同步完成：新增 ${result.inserted}，有 ${result.errors.length} 个错误`
         )
+        openSyncLogs()
       } else {
         message.success(`同步完成：拉取 ${result.fetched}，新增 ${result.inserted}`)
       }
@@ -133,6 +140,7 @@ export default function App() {
               { key: 'repos', icon: <DatabaseOutlined />, label: '仓库' },
               { key: 'commits', icon: <HistoryOutlined />, label: '提交' },
               { key: 'reports', icon: <FileTextOutlined />, label: '报告' },
+              { key: 'sync-logs', icon: <ProfileOutlined />, label: '日志' },
               { key: 'settings', icon: <SettingOutlined />, label: '设置' }
             ]}
           />
@@ -141,8 +149,17 @@ export default function App() {
           {tab === 'accounts' && (
             <AccountsPage accounts={accounts} activeId={activeId} onChanged={refresh} />
           )}
-          {tab === 'repos' && <ReposPage account={activeAccount} onChanged={refresh} />}
-          {tab === 'commits' && <CommitsPage account={activeAccount} />}
+          {tab === 'repos' && (
+            <ReposPage
+              account={activeAccount}
+              onChanged={refresh}
+              onOpenSyncLogs={openSyncLogs}
+            />
+          )}
+          {tab === 'commits' && (
+            <CommitsPage account={activeAccount} onOpenSyncLogs={openSyncLogs} />
+          )}
+          {tab === 'sync-logs' && <SyncLogsPage account={activeAccount} />}
           {tab === 'reports' && <ReportsPage account={activeAccount} />}
           {tab === 'settings' && <SettingsPage />}
         </main>

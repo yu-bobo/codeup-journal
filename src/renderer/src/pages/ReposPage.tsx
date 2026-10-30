@@ -27,6 +27,7 @@ import { getApi } from '../api'
 interface Props {
   account: Account | null
   onChanged: () => Promise<void>
+  onOpenSyncLogs?: () => void
 }
 
 type ScopeFilter = 'watched' | 'all'
@@ -43,7 +44,7 @@ function accessLabel(level?: number): string {
 /**
  * 仓库关注页：拉取可见仓库并勾选同步范围
  */
-export default function ReposPage({ account, onChanged }: Props) {
+export default function ReposPage({ account, onChanged, onOpenSyncLogs }: Props) {
   const [repos, setRepos] = useState<CodeupRepo[]>([])
   const [watched, setWatched] = useState<number[]>([])
   const [branches, setBranches] = useState<Record<string, string>>({})
@@ -206,8 +207,9 @@ export default function ReposPage({ account, onChanged }: Props) {
       const result = await getApi().sync.run(account.id, repoIds)
       if (result.errors.length) {
         message.warning(
-          `同步完成：新增 ${result.inserted}，失败 ${result.errors.length}（见同步日志）`
+          `同步完成：新增 ${result.inserted}，失败 ${result.errors.length}`
         )
+        onOpenSyncLogs?.()
       } else {
         message.success(
           `已同步 ${repoIds.length} 个仓库：拉取 ${result.fetched}，新增 ${result.inserted}`

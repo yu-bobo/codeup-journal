@@ -26,6 +26,7 @@ import { getApi } from '../api'
 
 interface Props {
   account: Account | null
+  onOpenSyncLogs?: () => void
 }
 
 const PAGE_SIZE = 20
@@ -33,7 +34,7 @@ const PAGE_SIZE = 20
 /**
  * 提交时间线：按日期/仓库筛选；内容区滚动，分页器固定底部
  */
-export default function CommitsPage({ account }: Props) {
+export default function CommitsPage({ account, onOpenSyncLogs }: Props) {
   const [repos, setRepos] = useState<CodeupRepo[]>([])
   const [items, setItems] = useState<StoredCommit[]>([])
   const [total, setTotal] = useState(0)
@@ -144,7 +145,8 @@ export default function CommitsPage({ account }: Props) {
             `已删除 ${cleared.deletedCommits} 条，重新同步新增 ${result.inserted}`
           )
           if (result.errors.length) {
-            message.warning(`同步有 ${result.errors.length} 个错误（见同步日志）`)
+            message.warning(`同步有 ${result.errors.length} 个错误`)
+            onOpenSyncLogs?.()
           }
           await load(1, pageSize)
         } catch (e: any) {
