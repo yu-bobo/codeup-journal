@@ -1,6 +1,6 @@
 import dayjs from 'dayjs'
 import type { StoredCommit } from '@shared/types'
-import { commitFullText } from '@shared/commitText'
+import { commitFullText, commitTitleLine } from '@shared/commitText'
 
 export function buildReportHeader(
   title: string,
@@ -47,10 +47,40 @@ export function buildCommitDetailsMarkdown(commits: StoredCommit[]): string {
 }
 
 /**
+ * 按仓仅列提交首行（供周报/月报压缩上下文）
+ */
+export function buildCommitSubjectListMarkdown(commits: StoredCommit[]): string {
+  const byRepo = new Map<string, StoredCommit[]>()
+  for (const c of commits) {
+    if (!byRepo.has(c.repoName)) byRepo.set(c.repoName, [])
+    byRepo.get(c.repoName)!.push(c)
+  }
+
+  const lines: string[] = []
+  const repos = Array.from(byRepo.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+  for (const [repo, list] of repos) {
+    lines.push(`### ${repo}`)
+    lines.push('')
+    for (const c of list) {
+      const time = dayjs(c.committedAt).format('MM-DD HH:mm')
+      lines.push(`- [${time}] ${commitTitleLine(c)}`)
+    }
+    lines.push('')
+  }
+  return lines.join('\n').trimEnd()
+}
+
+/**
  * 供 LLM 阅读的提交上下文；超长时截断并注明
  */
-export function buildCommitContextText(commits: StoredCommit[], maxChars: number): string {
-  const full = buildCommitDetailsMarkdown(commits)
+export function buildCommitContextText(
+  commits: StoredCommit[],
+  maxChars: number,
+  options?: { subjectOnly?: boolean }
+): string {
+  const full = options?.subjectOnly
+    ? buildCommitSubjectListMarkdown(commits)
+    : buildCommitDetailsMarkdown(commits)
   if (full.length <= maxChars) return full
   return `${full.slice(0, maxChars)}\n\n…（已截断，原文共 ${full.length} 字符）`
 }

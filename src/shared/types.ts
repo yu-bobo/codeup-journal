@@ -105,6 +105,8 @@ export interface ReportResult {
   markdown: string
   filePath?: string
   commitCount: number
+  // 周报 / 月报：区间内中国大陆法定工作日天数（本地按节假日缓存计算）
+  statutoryWorkdays?: number
 }
 
 export interface CommitsQuery {

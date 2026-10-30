@@ -2,6 +2,7 @@ import { writeFileSync, mkdirSync, existsSync } from 'fs'
 import { join } from 'path'
 import type { ReportRequest, ReportResult, StoredCommit } from '@shared/types'
 import { getAccount } from './accounts'
+import { resolveStatutoryWorkdays } from './cnWorkdays'
 import { db } from './db'
 import { reportsDir } from './paths'
 import { rangeFor } from './reportRange'
@@ -24,7 +25,7 @@ function buildTemplateMarkdown(
 }
 
 /**
- * 生成模板报告（预览不落盘）；AI 润色走独立接口
+ * 生成模板报告（预览不落盘）；AI 总结走独立接口
  */
 export async function generateReport(
   req: ReportRequest,
@@ -41,6 +42,7 @@ export async function generateReport(
     limit: 5000
   })
 
+  const statutoryWorkdays = await resolveStatutoryWorkdays(req.kind, req.date)
   const markdown = buildTemplateMarkdown(title, account.name, items)
   let filePath: string | undefined
   if (exportFile) {
@@ -54,6 +56,7 @@ export async function generateReport(
     title,
     markdown,
     filePath,
-    commitCount: items.length
+    commitCount: items.length,
+    statutoryWorkdays
   }
 }

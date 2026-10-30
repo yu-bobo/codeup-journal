@@ -15,7 +15,7 @@ interface Props {
 }
 
 /**
- * 报告页：主区预览模板；AI 润色结果从右侧抽屉弹出
+ * 报告页：主区预览模板；AI 总结结果从右侧抽屉弹出
  */
 export default function ReportsPage({ account }: Props) {
   const [kind, setKind] = useState<ReportKind>('day')
@@ -103,7 +103,7 @@ export default function ReportsPage({ account }: Props) {
       }
       setAiResult(r)
       setAiDrawerOpen(true)
-      message.success(`AI 润色完成（${r.commitCount} 条）`)
+      message.success(`AI 总结完成（${r.commitCount} 条）`)
     } catch (e: any) {
       message.error(e?.message || String(e))
     } finally {
@@ -124,7 +124,7 @@ export default function ReportsPage({ account }: Props) {
           <h2 className="page-title">报告</h2>
         </div>
         <p className="page-desc">
-          先预览模板草稿；不满意再按当前日 / 周 / 月 / 自定义区间做 AI 润色（结果在右侧抽屉）。模型与提示词在「设置
+          先预览模板草稿；不满意再按当前日 / 周 / 月 / 自定义区间做 AI 总结（结果在右侧抽屉）。模型与提示词在「设置
           → AI 配置」。
           {aiReady ? (
             <>
@@ -177,7 +177,7 @@ export default function ReportsPage({ account }: Props) {
             disabled={!aiReady}
             onClick={() => void polishAi()}
           >
-            AI 润色
+            AI 总结
           </Button>
           <Button
             icon={<CopyOutlined />}
@@ -197,6 +197,12 @@ export default function ReportsPage({ account }: Props) {
             <p style={{ margin: '4px 0 12px' }}>
               <strong>{result.title}</strong>
               <span className="muted"> · {result.commitCount} 条</span>
+              {result.statutoryWorkdays != null ? (
+                <span className="muted">
+                  {' '}
+                  · 法定工作日：{result.statutoryWorkdays} 天
+                </span>
+              ) : null}
             </p>
             <pre className="report-preview">{result.markdown}</pre>
           </>
@@ -204,14 +210,14 @@ export default function ReportsPage({ account }: Props) {
           <div className="empty-hint">
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="选择区间后点「预览」；不满意再点「AI 润色」"
+              description="选择区间后点「预览」；不满意再点「AI 总结」"
             />
           </div>
         )}
       </div>
 
       <Drawer
-        title="AI 润色结果"
+        title="AI 总结结果"
         placement="right"
         width={520}
         open={aiDrawerOpen}
@@ -238,6 +244,12 @@ export default function ReportsPage({ account }: Props) {
             <p style={{ margin: '0 0 12px' }}>
               <strong>{aiResult.title}</strong>
               <span className="muted"> · {aiResult.commitCount} 条</span>
+              {aiResult.statutoryWorkdays != null ? (
+                <span className="muted">
+                  {' '}
+                  · 法定工作日：{aiResult.statutoryWorkdays} 天
+                </span>
+              ) : null}
             </p>
             <pre className="report-preview report-preview-drawer">{aiResult.markdown}</pre>
           </>

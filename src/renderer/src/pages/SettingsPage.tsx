@@ -329,6 +329,9 @@ export default function SettingsPage() {
                 <code>{'{{commitCount}}'}</code>：该区间提交条数
               </li>
               <li>
+                <code>{'{{guidance}}'}</code>：按日报/周报/月报自动生成的条数指引
+              </li>
+              <li>
                 <code>{'{{commits}}'}</code>：按仓库分组的提交明细正文（供模型阅读）
               </li>
             </ul>

@@ -1,13 +1,10 @@
 import dayjs from 'dayjs'
-import type { ReportRequest, ReportResult, StoredCommit } from '@shared/types'
+import type { ReportKind, ReportRequest, ReportResult } from '@shared/types'
 import { getAccount, listAccounts } from '../accounts'
+import { resolveStatutoryWorkdays } from '../cnWorkdays'
 import { db } from '../db'
 import { rangeFor } from '../reportRange'
-import {
-  buildCommitContextText,
-  buildCommitDetailsMarkdown,
-  buildReportHeader
-} from '../reportMarkdown'
+import { buildCommitContextText } from '../reportMarkdown'
 import { loadSettings } from '../settings'
 import { loadAiApiKey } from '../vault'
 import { chatCompletion } from './openaiCompat'
@@ -24,22 +21,40 @@ function fillTemplate(
   })
 }
 
+function guidanceForKind(kind: ReportKind): string {
+  if (kind === 'day') return '日报：全文合计约 3～8 条，合并同类。'
+  if (kind === 'week') return '周报：全文合计约 3～7 条（跨仓合计），宁少勿碎。'
+  if (kind === 'month') return '月报：全文合计约 5～12 条，按主题归并。'
+  return '自定义区间：按跨度控制条数，合计约 5～12 条，宁少勿碎。'
+}
+// AI 总结
+// 去掉模型偶发包上的围栏/标题，压缩空行，便于直接粘贴
+function normalizeAiSummary(summary: string): string {
+  let s = summary.trim()
+  const fenced = s.match(/^```(?:text|markdown|md)?\s*\r?\n([\s\S]*?)\r?\n```$/i)
+  if (fenced) s = fenced[1].trim()
+  s = s
+    .replace(/^#{1,6}\s+.*$/gm, '')
+    .replace(/^\s*提交\s*\d+\s*条(?:；法定工作日：\d+\s*天)?[。.]?\s*$/gm, '')
+    .replace(/\n{2,}/g, '\n')
+    .trim()
+  return s
+}
+
+// 仅「提交数 + 法定工作日（周/月）+ 要点」，不附提交明细
 function assembleAiMarkdown(
-  title: string,
-  accountName: string,
-  commits: StoredCommit[],
-  summary: string
+  commitCount: number,
+  summary: string,
+  statutoryWorkdays?: number
 ): string {
-  const lines: string[] = []
-  lines.push(buildReportHeader(title, accountName, commits.length))
-  lines.push('## 工作摘要')
-  lines.push('')
-  lines.push(summary.trim())
-  lines.push('')
-  lines.push('## 按仓提交明细')
-  lines.push('')
-  lines.push(buildCommitDetailsMarkdown(commits))
-  return lines.join('\n').trimEnd() + '\n'
+  const body = normalizeAiSummary(summary)
+  const workdayPart =
+    statutoryWorkdays != null ? `；法定工作日：${statutoryWorkdays} 天` : ''
+  const header = `提交 ${commitCount} 条${workdayPart}。`
+  if (!body) {
+    return `${header}\n该时段无符合条件的可归纳要点。\n`
+  }
+  return `${header}\n${body}\n`
 }
 
 /**
@@ -71,23 +86,30 @@ export async function generateAiReport(
     limit: 5000
   })
 
+  const statutoryWorkdays = await resolveStatutoryWorkdays(req.kind, req.date)
+
   if (items.length === 0) {
     return {
       title,
       markdown: '',
       commitCount: 0,
+      statutoryWorkdays,
       skipped: true,
       usedAi: false
     }
   }
 
-  const commitsText = buildCommitContextText(items, MAX_CONTEXT_CHARS)
+  // 周/月/自定义只喂提交首行，避免模型照抄正文导致条目过长
+  const commitsText = buildCommitContextText(items, MAX_CONTEXT_CHARS, {
+    subjectOnly: req.kind !== 'day'
+  })
   const userContent = fillTemplate(settings.aiUserPromptTemplate, {
     date: period,
     period,
     kind: kindLabel,
     accountName: account.name,
     commitCount: items.length,
+    guidance: guidanceForKind(req.kind),
     commits: commitsText
   })
 
@@ -103,8 +125,9 @@ export async function generateAiReport(
 
   return {
     title,
-    markdown: assembleAiMarkdown(title, account.name, items, summary),
+    markdown: assembleAiMarkdown(items.length, summary, statutoryWorkdays),
     commitCount: items.length,
+    statutoryWorkdays,
     usedAi: true
   }
 }
