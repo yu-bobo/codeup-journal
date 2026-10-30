@@ -1,21 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Button, InputNumber, Space, Tag, Typography, message } from 'antd'
+import { Button, Input, InputNumber, Space, Tag, Typography, message } from 'antd'
 import { FolderOpenOutlined, UndoOutlined } from '@ant-design/icons'
+import type { AppSettingsView } from '@shared/types'
 import { getApi } from '../api'
 
-interface AppSettingsView {
-  exportsPath: string
-  resolvedExportsPath: string
-  defaultExportsPath: string
-  isCustomExports: boolean
-  syncIntervalMinutes: number
-  syncLookbackDays: number
-  defaultSyncIntervalMinutes: number
-  defaultSyncLookbackDays: number
-}
-
 /**
- * 设置页：同步参数、材料落盘目录等应用级配置
+ * 设置页：同步参数、材料落盘目录、AI 模型与提示词配置
  */
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettingsView | null>(null)
@@ -24,10 +14,24 @@ export default function SettingsPage() {
   const [lookbackDraft, setLookbackDraft] = useState(90)
   const [savingSync, setSavingSync] = useState(false)
 
+  const [aiBaseUrl, setAiBaseUrl] = useState('')
+  const [aiModel, setAiModel] = useState('')
+  const [aiSystemPrompt, setAiSystemPrompt] = useState('')
+  const [aiUserPromptTemplate, setAiUserPromptTemplate] = useState('')
+  const [aiApiKeyDraft, setAiApiKeyDraft] = useState('')
+  const [savingAi, setSavingAi] = useState(false)
+  const [testingAi, setTestingAi] = useState(false)
+
   const applySettings = (next: AppSettingsView): void => {
     setSettings(next)
     setIntervalDraft(next.syncIntervalMinutes)
     setLookbackDraft(next.syncLookbackDays)
+    setAiBaseUrl(next.aiBaseUrl || next.defaultAiBaseUrl)
+    setAiModel(next.aiModel || next.defaultAiModel)
+    setAiSystemPrompt(next.aiSystemPrompt || next.defaultAiSystemPrompt)
+    setAiUserPromptTemplate(
+      next.aiUserPromptTemplate || next.defaultAiUserPromptTemplate
+    )
   }
 
   const refresh = async (): Promise<void> => {
@@ -84,6 +88,79 @@ export default function SettingsPage() {
     }
   }
 
+  const saveAi = async (): Promise<void> => {
+    setSavingAi(true)
+    try {
+      const settingsApi = getApi().settings
+      if (typeof settingsApi.setAi !== 'function') {
+        throw new Error(
+          '桥接未更新：请完全退出应用后重新执行 pnpm dev（仅刷新页面无效）'
+        )
+      }
+      // Key 与配置一次写入；暂不定时日报
+      const next = await settingsApi.setAi({
+        aiEnabled: false,
+        aiBaseUrl,
+        aiModel,
+        aiSystemPrompt,
+        aiUserPromptTemplate,
+        apiKey: aiApiKeyDraft.trim() || undefined
+      })
+      setAiApiKeyDraft('')
+      applySettings(next)
+      message.success('已保存 AI 配置')
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSavingAi(false)
+    }
+  }
+
+  const clearAiKey = async (): Promise<void> => {
+    setSavingAi(true)
+    try {
+      const settingsApi = getApi().settings
+      if (typeof settingsApi.clearAiApiKey !== 'function') {
+        throw new Error(
+          '桥接未更新：请完全退出应用后重新执行 pnpm dev（仅刷新页面无效）'
+        )
+      }
+      applySettings(await settingsApi.clearAiApiKey())
+      setAiApiKeyDraft('')
+      message.success('已清除 API Key')
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSavingAi(false)
+    }
+  }
+
+  const testAi = async (): Promise<void> => {
+    setTestingAi(true)
+    try {
+      const api = getApi()
+      if (typeof api.settings.setAi !== 'function' || typeof api.ai?.testConnection !== 'function') {
+        throw new Error(
+          '桥接未更新：请完全退出应用后重新执行 pnpm dev（仅刷新页面无效）'
+        )
+      }
+      await api.settings.setAi({
+        aiEnabled: false,
+        aiBaseUrl,
+        aiModel,
+        apiKey: aiApiKeyDraft.trim() || undefined
+      })
+      setAiApiKeyDraft('')
+      const r = await api.ai.testConnection()
+      applySettings(await api.settings.get())
+      message.success(`连接成功：${r.reply}`)
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setTestingAi(false)
+    }
+  }
+
   const defaultInterval = settings?.defaultSyncIntervalMinutes ?? 30
   const defaultLookback = settings?.defaultSyncLookbackDays ?? 90
 
@@ -91,6 +168,15 @@ export default function SettingsPage() {
     settings != null &&
     (intervalDraft !== settings.syncIntervalMinutes ||
       lookbackDraft !== settings.syncLookbackDays)
+
+  const aiDirty =
+    settings != null &&
+    (aiBaseUrl !== settings.aiBaseUrl ||
+      aiModel !== settings.aiModel ||
+      aiSystemPrompt !== settings.aiSystemPrompt ||
+      aiUserPromptTemplate !== settings.aiUserPromptTemplate ||
+      Boolean(aiApiKeyDraft.trim()) ||
+      settings.aiEnabled)
 
   return (
     <div className="page-card">
@@ -140,6 +226,132 @@ export default function SettingsPage() {
               保存
             </Button>
           </div>
+        </Space>
+      </div>
+
+      <div className="settings-block">
+        <h3>AI 配置</h3>
+        <p className="page-desc" style={{ marginBottom: 12 }}>
+          对接 OpenAI 兼容接口（DeepSeek / Kimi / 自建等）。配置后到「报告」页预览草稿，不满意再点 AI
+          润色。
+        </p>
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Space wrap align="center" style={{ width: '100%' }}>
+            <span style={{ width: 96 }}>Base URL</span>
+            <Input
+              value={aiBaseUrl}
+              onChange={(e) => setAiBaseUrl(e.target.value)}
+              placeholder={settings?.defaultAiBaseUrl}
+              style={{ maxWidth: 420, flex: 1 }}
+            />
+          </Space>
+          <Space wrap align="center">
+            <span style={{ width: 96 }}>模型</span>
+            <Input
+              value={aiModel}
+              onChange={(e) => setAiModel(e.target.value)}
+              placeholder={settings?.defaultAiModel}
+              style={{ width: 240 }}
+            />
+          </Space>
+          <Space wrap align="center" style={{ width: '100%' }}>
+            <span style={{ width: 96 }}>API Key</span>
+            <Input.Password
+              value={aiApiKeyDraft}
+              onChange={(e) => setAiApiKeyDraft(e.target.value)}
+              placeholder={
+                settings?.aiApiKeyConfigured ? '已配置（留空则不修改）' : '粘贴 API Key'
+              }
+              style={{ maxWidth: 420, flex: 1 }}
+              autoComplete="off"
+            />
+            {settings?.aiApiKeyConfigured ? (
+              <Tag color="green">已配置</Tag>
+            ) : (
+              <Tag>未配置</Tag>
+            )}
+            {settings?.aiApiKeyConfigured ? (
+              <Button loading={savingAi} onClick={() => void clearAiKey()}>
+                清除
+              </Button>
+            ) : null}
+          </Space>
+          <div>
+            <div
+              style={{
+                marginBottom: 6,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                flexWrap: 'wrap'
+              }}
+            >
+              <span>System 提示词</span>
+              <Button
+                type="link"
+                size="small"
+                style={{ padding: 0, height: 'auto' }}
+                onClick={() => {
+                  if (!settings) return
+                  setAiSystemPrompt(settings.defaultAiSystemPrompt)
+                  setAiUserPromptTemplate(settings.defaultAiUserPromptTemplate)
+                  message.info('已填入默认提示词与模板，请点保存生效')
+                }}
+              >
+                恢复默认
+              </Button>
+            </div>
+            <Input.TextArea
+              value={aiSystemPrompt}
+              onChange={(e) => setAiSystemPrompt(e.target.value)}
+              placeholder={settings?.defaultAiSystemPrompt}
+              autoSize={{ minRows: 4, maxRows: 10 }}
+            />
+          </div>
+          <div>
+            <div style={{ marginBottom: 6 }}>User 模板</div>
+            <ul className="muted" style={{ margin: '0 0 10px', paddingLeft: 18, lineHeight: 1.7 }}>
+              <li>
+                <code>{'{{kind}}'}</code>：报告类型，如日报 / 周报 / 月报 / 自定义汇报
+              </li>
+              <li>
+                <code>{'{{period}}'}</code>：区间说明，如 <code>2026-10-30</code>、
+                <code>2026-W44（10-27 ~ 11-02）</code>、<code>2026-10</code>
+              </li>
+              <li>
+                <code>{'{{date}}'}</code>：与 <code>{'{{period}}'}</code> 相同，兼容旧模板
+              </li>
+              <li>
+                <code>{'{{accountName}}'}</code>：当前账号显示名称
+              </li>
+              <li>
+                <code>{'{{commitCount}}'}</code>：该区间提交条数
+              </li>
+              <li>
+                <code>{'{{commits}}'}</code>：按仓库分组的提交明细正文（供模型阅读）
+              </li>
+            </ul>
+            <Input.TextArea
+              value={aiUserPromptTemplate}
+              onChange={(e) => setAiUserPromptTemplate(e.target.value)}
+              placeholder={settings?.defaultAiUserPromptTemplate}
+              autoSize={{ minRows: 4, maxRows: 10 }}
+            />
+          </div>
+          <Space wrap>
+            <Button
+              type="primary"
+              loading={savingAi}
+              disabled={!aiDirty}
+              onClick={() => void saveAi()}
+            >
+              保存
+            </Button>
+            <Button loading={testingAi} onClick={() => void testAi()}>
+              测试连接
+            </Button>
+          </Space>
         </Space>
       </div>
 

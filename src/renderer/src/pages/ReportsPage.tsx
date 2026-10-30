@@ -1,13 +1,13 @@
-import { useState } from 'react'
-import { Button, DatePicker, Empty, Radio, message } from 'antd'
+import { useEffect, useState } from 'react'
+import { Button, DatePicker, Drawer, Empty, Radio, Space, Tag, message } from 'antd'
 import {
   CopyOutlined,
-  DownloadOutlined,
   EyeOutlined,
-  FileTextOutlined
+  FileTextOutlined,
+  ThunderboltOutlined
 } from '@ant-design/icons'
 import dayjs, { type Dayjs } from 'dayjs'
-import type { Account, ReportKind, ReportResult } from '@shared/types'
+import type { Account, AppSettingsView, ReportKind, ReportResult } from '@shared/types'
 import { getApi } from '../api'
 
 interface Props {
@@ -15,14 +15,27 @@ interface Props {
 }
 
 /**
- * 报告页：按日/周/月生成 Markdown 草稿并导出
+ * 报告页：主区预览模板；AI 润色结果从右侧抽屉弹出
  */
 export default function ReportsPage({ account }: Props) {
-  const [kind, setKind] = useState<ReportKind>('week')
+  const [kind, setKind] = useState<ReportKind>('day')
   const [date, setDate] = useState<Dayjs>(dayjs())
   const [range, setRange] = useState<[Dayjs, Dayjs] | null>(null)
   const [loading, setLoading] = useState(false)
+  const [aiLoading, setAiLoading] = useState(false)
   const [result, setResult] = useState<ReportResult | null>(null)
+  const [aiResult, setAiResult] = useState<ReportResult | null>(null)
+  const [aiDrawerOpen, setAiDrawerOpen] = useState(false)
+  const [aiReady, setAiReady] = useState(false)
+
+  const refreshAiStatus = async (): Promise<void> => {
+    const s: AppSettingsView = await getApi().settings.get()
+    setAiReady(s.aiApiKeyConfigured && Boolean(s.aiBaseUrl.trim()) && Boolean(s.aiModel.trim()))
+  }
+
+  useEffect(() => {
+    void refreshAiStatus()
+  }, [])
 
   if (!account) {
     return (
@@ -68,95 +81,170 @@ export default function ReportsPage({ account }: Props) {
     }
   }
 
-  const exportReport = async () => {
-    setLoading(true)
+  const polishAi = async () => {
+    if (!aiReady) {
+      message.warning('请先在「设置 → AI 配置」中填写 Base URL、模型与 API Key')
+      return
+    }
+    setAiLoading(true)
     try {
-      const r = await getApi().reports.generate(buildReq())
-      setResult(r)
-      message.success(`已导出 ${r.commitCount} 条提交`)
-      if (r.filePath) await getApi().app.openPath(r.filePath)
+      const api = getApi()
+      if (typeof api.ai?.generateReport !== 'function') {
+        throw new Error(
+          '桥接未更新：请完全退出应用后重新执行 pnpm dev（仅刷新页面无效）'
+        )
+      }
+      const r = await api.ai.generateReport(buildReq())
+      if (r.skipped) {
+        setAiResult(null)
+        setAiDrawerOpen(false)
+        message.info('该区间暂无提交，无法润色')
+        return
+      }
+      setAiResult(r)
+      setAiDrawerOpen(true)
+      message.success(`AI 润色完成（${r.commitCount} 条）`)
     } catch (e: any) {
       message.error(e?.message || String(e))
     } finally {
-      setLoading(false)
+      setAiLoading(false)
     }
   }
 
-  const copy = async () => {
-    if (!result?.markdown) return
-    await navigator.clipboard.writeText(result.markdown)
+  const copyMarkdown = async (markdown?: string) => {
+    if (!markdown) return
+    await navigator.clipboard.writeText(markdown)
     message.success('已复制到剪贴板')
   }
 
   return (
-    <div className="page-card">
-      <div className="page-header">
-        <h2 className="page-title">报告</h2>
-      </div>
-      <p className="page-desc">根据已同步提交生成日报 / 周报 / 月报草稿。落盘路径见「设置」。</p>
-      <div className="toolbar">
-        <Radio.Group
-          value={kind}
-          onChange={(e) => setKind(e.target.value)}
-          optionType="button"
-          options={[
-            { label: '日报', value: 'day' },
-            { label: '周报', value: 'week' },
-            { label: '月报', value: 'month' },
-            { label: '自定义', value: 'custom' }
-          ]}
-        />
-        {kind === 'custom' ? (
-          <DatePicker.RangePicker
-            value={range}
-            onChange={(v) => setRange(v as [Dayjs, Dayjs] | null)}
-          />
-        ) : (
-          <DatePicker
-            value={date}
-            onChange={(v) => v && setDate(v)}
-            picker={kind === 'month' ? 'month' : kind === 'week' ? 'week' : 'date'}
-          />
-        )}
-        <Button
-          icon={<EyeOutlined />}
-          loading={loading}
-          onClick={() => void preview()}
-        >
-          预览
-        </Button>
-        <Button
-          type="primary"
-          icon={<DownloadOutlined />}
-          loading={loading}
-          onClick={() => void exportReport()}
-        >
-          导出
-        </Button>
-        <Button
-          icon={<CopyOutlined />}
-          disabled={!result}
-          onClick={() => void copy()}
-        >
-          复制
-        </Button>
-      </div>
-      {result ? (
-        <>
-          <p style={{ margin: '4px 0 12px' }}>
-            <strong>{result.title}</strong>
-            <span className="muted"> · {result.commitCount} 条</span>
-          </p>
-          <pre className="report-preview">{result.markdown}</pre>
-        </>
-      ) : (
-        <div className="empty-hint">
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="选择区间后点击「预览」或「导出」"
-          />
+    <div className="page-card page-with-drawer">
+      <div className="page-with-drawer-body">
+        <div className="page-header">
+          <h2 className="page-title">报告</h2>
         </div>
-      )}
+        <p className="page-desc">
+          先预览模板草稿；不满意再按当前日 / 周 / 月 / 自定义区间做 AI 润色（结果在右侧抽屉）。模型与提示词在「设置
+          → AI 配置」。
+          {aiReady ? (
+            <>
+              {' '}
+              <Tag color="green">AI 已配置</Tag>
+            </>
+          ) : (
+            <>
+              {' '}
+              <Tag>AI 未配置</Tag>
+            </>
+          )}
+        </p>
+
+        <div className="toolbar">
+          <Radio.Group
+            value={kind}
+            onChange={(e) => setKind(e.target.value)}
+            optionType="button"
+            options={[
+              { label: '日报', value: 'day' },
+              { label: '周报', value: 'week' },
+              { label: '月报', value: 'month' },
+              { label: '自定义', value: 'custom' }
+            ]}
+          />
+          {kind === 'custom' ? (
+            <DatePicker.RangePicker
+              value={range}
+              onChange={(v) => setRange(v as [Dayjs, Dayjs] | null)}
+            />
+          ) : (
+            <DatePicker
+              value={date}
+              onChange={(v) => v && setDate(v)}
+              picker={kind === 'month' ? 'month' : kind === 'week' ? 'week' : 'date'}
+            />
+          )}
+          <Button
+            type="primary"
+            icon={<EyeOutlined />}
+            loading={loading}
+            onClick={() => void preview()}
+          >
+            预览
+          </Button>
+          <Button
+            icon={<ThunderboltOutlined />}
+            loading={aiLoading}
+            disabled={!aiReady}
+            onClick={() => void polishAi()}
+          >
+            AI 润色
+          </Button>
+          <Button
+            icon={<CopyOutlined />}
+            disabled={!result}
+            onClick={() => void copyMarkdown(result?.markdown)}
+          >
+            复制
+          </Button>
+          {aiResult ? (
+            <Button type="link" onClick={() => setAiDrawerOpen(true)}>
+              查看 AI 结果
+            </Button>
+          ) : null}
+        </div>
+        {result ? (
+          <>
+            <p style={{ margin: '4px 0 12px' }}>
+              <strong>{result.title}</strong>
+              <span className="muted"> · {result.commitCount} 条</span>
+            </p>
+            <pre className="report-preview">{result.markdown}</pre>
+          </>
+        ) : (
+          <div className="empty-hint">
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description="选择区间后点「预览」；不满意再点「AI 润色」"
+            />
+          </div>
+        )}
+      </div>
+
+      <Drawer
+        title="AI 润色结果"
+        placement="right"
+        width={520}
+        open={aiDrawerOpen}
+        onClose={() => setAiDrawerOpen(false)}
+        destroyOnClose={false}
+        // 挂在报告页卡片内，不遮盖顶栏与侧栏
+        getContainer={false}
+        rootClassName="page-local-drawer"
+        extra={
+          <Space>
+            <Button
+              type="primary"
+              icon={<CopyOutlined />}
+              disabled={!aiResult?.markdown}
+              onClick={() => void copyMarkdown(aiResult?.markdown)}
+            >
+              复制
+            </Button>
+          </Space>
+        }
+      >
+        {aiResult ? (
+          <>
+            <p style={{ margin: '0 0 12px' }}>
+              <strong>{aiResult.title}</strong>
+              <span className="muted"> · {aiResult.commitCount} 条</span>
+            </p>
+            <pre className="report-preview report-preview-drawer">{aiResult.markdown}</pre>
+          </>
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无 AI 结果" />
+        )}
+      </Drawer>
     </div>
   )
 }

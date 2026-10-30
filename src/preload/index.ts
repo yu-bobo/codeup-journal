@@ -3,6 +3,9 @@ import type {
   Account,
   AccountInput,
   AccountUpdate,
+  AiDailyBatchResult,
+  AiSettingsInput,
+  AppSettingsView,
   CodeupRepo,
   CommitsQuery,
   ReportRequest,
@@ -67,6 +70,15 @@ const api = {
     preview: (req: ReportRequest): Promise<ReportResult> =>
       ipcRenderer.invoke('reports:preview', req)
   },
+  ai: {
+    testConnection: (): Promise<{ ok: true; reply: string }> =>
+      ipcRenderer.invoke('ai:testConnection'),
+    runDailyNow: (): Promise<AiDailyBatchResult> => ipcRenderer.invoke('ai:runDailyNow'),
+    generateReport: (
+      req: ReportRequest
+    ): Promise<ReportResult & { skipped?: boolean; usedAi: boolean }> =>
+      ipcRenderer.invoke('ai:generateReport', req)
+  },
   app: {
     openExports: (): Promise<boolean> => ipcRenderer.invoke('app:openExports'),
     openDataRoot: (): Promise<boolean> => ipcRenderer.invoke('app:openDataRoot'),
@@ -85,62 +97,20 @@ const api = {
     }
   },
   settings: {
-    get: (): Promise<{
-      exportsPath: string
-      resolvedExportsPath: string
-      defaultExportsPath: string
-      isCustomExports: boolean
-      syncIntervalMinutes: number
-      syncLookbackDays: number
-      defaultSyncIntervalMinutes: number
-      defaultSyncLookbackDays: number
-    }> => ipcRenderer.invoke('settings:get'),
-    setExportsPath: (
-      path: string
-    ): Promise<{
-      exportsPath: string
-      resolvedExportsPath: string
-      defaultExportsPath: string
-      isCustomExports: boolean
-      syncIntervalMinutes: number
-      syncLookbackDays: number
-      defaultSyncIntervalMinutes: number
-      defaultSyncLookbackDays: number
-    }> => ipcRenderer.invoke('settings:setExportsPath', path),
-    setSyncIntervalMinutes: (
-      minutes: number
-    ): Promise<{
-      exportsPath: string
-      resolvedExportsPath: string
-      defaultExportsPath: string
-      isCustomExports: boolean
-      syncIntervalMinutes: number
-      syncLookbackDays: number
-      defaultSyncIntervalMinutes: number
-      defaultSyncLookbackDays: number
-    }> => ipcRenderer.invoke('settings:setSyncIntervalMinutes', minutes),
-    setSyncLookbackDays: (
-      days: number
-    ): Promise<{
-      exportsPath: string
-      resolvedExportsPath: string
-      defaultExportsPath: string
-      isCustomExports: boolean
-      syncIntervalMinutes: number
-      syncLookbackDays: number
-      defaultSyncIntervalMinutes: number
-      defaultSyncLookbackDays: number
-    }> => ipcRenderer.invoke('settings:setSyncLookbackDays', days),
-    pickExportsDir: (): Promise<{
-      exportsPath: string
-      resolvedExportsPath: string
-      defaultExportsPath: string
-      isCustomExports: boolean
-      syncIntervalMinutes: number
-      syncLookbackDays: number
-      defaultSyncIntervalMinutes: number
-      defaultSyncLookbackDays: number
-    } | null> => ipcRenderer.invoke('settings:pickExportsDir')
+    get: (): Promise<AppSettingsView> => ipcRenderer.invoke('settings:get'),
+    setExportsPath: (path: string): Promise<AppSettingsView> =>
+      ipcRenderer.invoke('settings:setExportsPath', path),
+    setSyncIntervalMinutes: (minutes: number): Promise<AppSettingsView> =>
+      ipcRenderer.invoke('settings:setSyncIntervalMinutes', minutes),
+    setSyncLookbackDays: (days: number): Promise<AppSettingsView> =>
+      ipcRenderer.invoke('settings:setSyncLookbackDays', days),
+    setAi: (patch: AiSettingsInput): Promise<AppSettingsView> =>
+      ipcRenderer.invoke('settings:setAi', patch),
+    setAiApiKey: (key: string): Promise<AppSettingsView> =>
+      ipcRenderer.invoke('settings:setAiApiKey', key),
+    clearAiApiKey: (): Promise<AppSettingsView> => ipcRenderer.invoke('settings:clearAiApiKey'),
+    pickExportsDir: (): Promise<AppSettingsView | null> =>
+      ipcRenderer.invoke('settings:pickExportsDir')
   }
 }
 

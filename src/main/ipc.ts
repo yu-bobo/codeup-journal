@@ -13,17 +13,27 @@ import {
 } from './accounts'
 import { testConnection, listAllRepositories, listBranches } from './codeup'
 import { db } from './db'
+import { generateAiReport, testAiConnection } from './ai/dailyReport'
+import { runAiDailyNow } from './ai/schedule'
 import { generateReport } from './reports'
 import { defaultExportsDir, exportsDir, getDataRoot } from './paths'
 import {
+  DEFAULT_AI_BASE_URL,
+  DEFAULT_AI_DAILY_AT,
+  DEFAULT_AI_MODEL,
+  DEFAULT_AI_SYSTEM_PROMPT,
+  DEFAULT_AI_USER_PROMPT_TEMPLATE,
   DEFAULT_SYNC_INTERVAL_MINUTES,
   DEFAULT_SYNC_LOOKBACK_DAYS,
   loadSettings,
+  setAiSettings,
   setExportsPathSetting,
   setSyncIntervalMinutes,
-  setSyncLookbackDays
+  setSyncLookbackDays,
+  type AiSettingsPatch
 } from './settings'
 import { rescheduleAll, scheduleAccount, syncAccount } from './sync'
+import { deleteAiApiKey, hasAiApiKey, saveAiApiKey } from './vault'
 
 export function registerIpc(): void {
   ipcMain.handle('accounts:list', () => listAccounts())
@@ -125,6 +135,10 @@ export function registerIpc(): void {
   ipcMain.handle('reports:generate', (_e, req: ReportRequest) => generateReport(req, true))
   ipcMain.handle('reports:preview', (_e, req: ReportRequest) => generateReport(req, false))
 
+  ipcMain.handle('ai:testConnection', () => testAiConnection())
+  ipcMain.handle('ai:runDailyNow', () => runAiDailyNow())
+  ipcMain.handle('ai:generateReport', (_e, req: ReportRequest) => generateAiReport(req))
+
   ipcMain.handle('app:openExports', async () => {
     await shell.openPath(exportsDir())
     return true
@@ -173,7 +187,19 @@ export function registerIpc(): void {
       syncIntervalMinutes: s.syncIntervalMinutes,
       syncLookbackDays: s.syncLookbackDays,
       defaultSyncIntervalMinutes: DEFAULT_SYNC_INTERVAL_MINUTES,
-      defaultSyncLookbackDays: DEFAULT_SYNC_LOOKBACK_DAYS
+      defaultSyncLookbackDays: DEFAULT_SYNC_LOOKBACK_DAYS,
+      aiEnabled: s.aiEnabled,
+      aiBaseUrl: s.aiBaseUrl,
+      aiModel: s.aiModel,
+      aiDailyAt: s.aiDailyAt,
+      aiSystemPrompt: s.aiSystemPrompt,
+      aiUserPromptTemplate: s.aiUserPromptTemplate,
+      aiApiKeyConfigured: hasAiApiKey(),
+      defaultAiBaseUrl: DEFAULT_AI_BASE_URL,
+      defaultAiModel: DEFAULT_AI_MODEL,
+      defaultAiDailyAt: DEFAULT_AI_DAILY_AT,
+      defaultAiSystemPrompt: DEFAULT_AI_SYSTEM_PROMPT,
+      defaultAiUserPromptTemplate: DEFAULT_AI_USER_PROMPT_TEMPLATE
     }
   }
 
@@ -189,6 +215,29 @@ export function registerIpc(): void {
   })
   ipcMain.handle('settings:setSyncLookbackDays', (_e, days: number) => {
     setSyncLookbackDays(days)
+    return settingsDto()
+  })
+  ipcMain.handle(
+    'settings:setAi',
+    (_e, patch: AiSettingsPatch & { apiKey?: string }) => {
+      const body = patch || {}
+      const { apiKey, ...rest } = body
+      // 暂不定时日报：忽略启用与时刻，强制关闭
+      setAiSettings({ ...rest, aiEnabled: false })
+      if (typeof apiKey === 'string' && apiKey.trim()) {
+        saveAiApiKey(apiKey.trim())
+      }
+      return settingsDto()
+    }
+  )
+  ipcMain.handle('settings:setAiApiKey', (_e, key: string) => {
+    const trimmed = typeof key === 'string' ? key.trim() : ''
+    if (!trimmed) throw new Error('API Key 不能为空')
+    saveAiApiKey(trimmed)
+    return settingsDto()
+  })
+  ipcMain.handle('settings:clearAiApiKey', () => {
+    deleteAiApiKey()
     return settingsDto()
   })
   ipcMain.handle('settings:pickExportsDir', async () => {

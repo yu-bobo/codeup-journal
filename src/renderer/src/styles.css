@@ -574,9 +574,34 @@ html[data-theme='dark'] .app-sider .ant-menu-item-selected {
   z-index: 0;
 }
 
-.page-card > * {
+.page-card > *:not(.ant-drawer) {
   position: relative;
   z-index: 1;
+}
+
+/* 报告页等：抽屉限定在 page-card 内，不盖顶栏 */
+.page-card.page-with-drawer {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 12px;
+}
+
+.page-with-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.page-card.page-with-drawer > .ant-drawer {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+}
+
+.page-local-drawer.ant-drawer .ant-drawer-mask,
+.page-local-drawer.ant-drawer .ant-drawer-content-wrapper {
+  position: absolute;
 }
 
 @keyframes page-enter {
@@ -691,6 +716,10 @@ html[data-theme='dark'] .app-sider .ant-menu-item-selected {
     0 10px 28px rgba(8, 16, 28, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 0 20px var(--report-glow);
+}
+
+.report-preview-drawer {
+  max-height: calc(100vh - 160px);
 }
 
 .commit-msg-cell {

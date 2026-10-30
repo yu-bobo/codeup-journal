@@ -116,3 +116,48 @@ export interface CommitsQuery {
   limit?: number
   offset?: number
 }
+
+export interface AppSettingsView {
+  exportsPath: string
+  resolvedExportsPath: string
+  defaultExportsPath: string
+  isCustomExports: boolean
+  syncIntervalMinutes: number
+  syncLookbackDays: number
+  defaultSyncIntervalMinutes: number
+  defaultSyncLookbackDays: number
+  aiEnabled: boolean
+  aiBaseUrl: string
+  aiModel: string
+  aiDailyAt: string
+  aiSystemPrompt: string
+  aiUserPromptTemplate: string
+  aiApiKeyConfigured: boolean
+  defaultAiBaseUrl: string
+  defaultAiModel: string
+  defaultAiDailyAt: string
+  defaultAiSystemPrompt: string
+  defaultAiUserPromptTemplate: string
+}
+
+export interface AiSettingsInput {
+  aiEnabled?: boolean
+  aiBaseUrl?: string
+  aiModel?: string
+  aiDailyAt?: string
+  aiSystemPrompt?: string
+  aiUserPromptTemplate?: string
+  // 可选：一并写入加密 API Key（空字符串表示不改）
+  apiKey?: string
+}
+
+export interface AiDailyBatchResult {
+  date: string
+  results: {
+    accountId: string
+    accountName: string
+    ok: boolean
+    skipped?: boolean
+    message: string
+  }[]
+}
