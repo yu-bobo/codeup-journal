@@ -3,7 +3,9 @@ import { existsSync } from 'fs'
 import { join } from 'path'
 import { getAppIconPath } from './icon'
 import { registerIpc } from './ipc'
+import { applyMcpHttpFromSettings, stopMcpHttpServer } from './mcp/httpServer'
 import { getDataRoot } from './paths'
+import { loadSettings } from './settings'
 import { rescheduleAll, stopAllSchedules } from './sync'
 import { createTray, destroyTray } from './tray'
 
@@ -79,6 +81,8 @@ app.whenReady().then(() => {
   createWindow()
   createTray(() => mainWindow)
   rescheduleAll()
+  const mcp = loadSettings()
+  void applyMcpHttpFromSettings({ enabled: mcp.mcpEnabled, port: mcp.mcpPort })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -89,6 +93,7 @@ app.whenReady().then(() => {
 app.on('before-quit', () => {
   quitting = true
   stopAllSchedules()
+  void stopMcpHttpServer()
   destroyTray()
 })
 

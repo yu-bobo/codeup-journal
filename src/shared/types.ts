@@ -140,6 +140,9 @@ export interface AppSettingsView {
   defaultAiDailyAt: string
   defaultAiSystemPrompt: string
   defaultAiUserPromptTemplate: string
+  mcpEnabled: boolean
+  mcpPort: number
+  defaultMcpPort: number
 }
 
 export interface AiSettingsInput {
@@ -162,4 +165,22 @@ export interface AiDailyBatchResult {
     skipped?: boolean
     message: string
   }[]
+}
+
+export interface McpConfigStatus {
+  enabled: boolean
+  port: number
+  running: boolean
+  listenPort: number | null
+  endpointUrl: string
+  dataRoot: string
+  serverKey: string
+  lastError: string | null
+  configJson: string
+  defaultPort: number
+}
+
+export interface McpSettingsInput {
+  mcpEnabled?: boolean
+  mcpPort?: number
 }

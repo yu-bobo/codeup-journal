@@ -45,6 +45,32 @@ Windows 桌面工具：对接阿里云云效 Codeup，多账号切换，定时�
 
 口径为中国大陆法定工作日（扣节假日、含周末补班）。节假日数据来自 [timor.tech](https://timor.tech/api/holiday)，按年拉取后缓存到 `holiday-cache/`（约 30 天刷新）；离线或失败时先用旧缓存，再不行按周一至周五估算。AI 正文开头也会带同一天数，便于复制。
 
+## MCP 服务
+
+默认在本机 `http://127.0.0.1:39281/mcp` 提供只读 HTTP MCP。不触发云效同步、不读 PAT；请先在桌面端完成同步。
+
+在 **设置 → MCP** 可开关、改端口、复制通用 `mcp.json` 片段，粘贴到任意支持 MCP 的客户端即可。
+
+```json
+{
+  "mcpServers": {
+    "codeup-journal": {
+      "type": "http",
+      "url": "http://127.0.0.1:39281/mcp"
+    }
+  }
+}
+```
+
+口语示例：「用 codeup-journal 拉本周提交，整理成周报要点」。
+
+| Tool | 说明 |
+|------|------|
+| `list_accounts` | 列出本地账号 |
+| `list_repos` | 列出某账号下已有提交的仓库 |
+| `query_commits` | 按日期/仓库/关键词查提交 |
+| `get_period_commits` | 按日/周/月/自定义区间拉报告材料 Markdown |
+
 ## 开发运行
 
 ```bash

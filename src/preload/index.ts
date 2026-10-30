@@ -8,6 +8,8 @@ import type {
   AppSettingsView,
   CodeupRepo,
   CommitsQuery,
+  McpConfigStatus,
+  McpSettingsInput,
   ReportRequest,
   ReportResult,
   StoredCommit,
@@ -116,6 +118,12 @@ const api = {
     clearAiApiKey: (): Promise<AppSettingsView> => ipcRenderer.invoke('settings:clearAiApiKey'),
     pickExportsDir: (): Promise<AppSettingsView | null> =>
       ipcRenderer.invoke('settings:pickExportsDir')
+  },
+  mcp: {
+    getStatus: (): Promise<McpConfigStatus> => ipcRenderer.invoke('mcp:getStatus'),
+    setSettings: (patch: McpSettingsInput): Promise<McpConfigStatus> =>
+      ipcRenderer.invoke('mcp:setSettings', patch),
+    restart: (): Promise<McpConfigStatus> => ipcRenderer.invoke('mcp:restart')
   }
 }
 

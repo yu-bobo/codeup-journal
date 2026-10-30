@@ -1,13 +1,29 @@
 import { useEffect, useState } from 'react'
-import { Button, Input, InputNumber, Space, Tabs, Tag, Tooltip, Typography, message } from 'antd'
-import { FolderOpenOutlined, QuestionCircleOutlined, UndoOutlined } from '@ant-design/icons'
-import type { AppSettingsView } from '@shared/types'
+import {
+  Button,
+  Input,
+  InputNumber,
+  Space,
+  Switch,
+  Tabs,
+  Tag,
+  Tooltip,
+  Typography,
+  message
+} from 'antd'
+import {
+  CopyOutlined,
+  FolderOpenOutlined,
+  QuestionCircleOutlined,
+  UndoOutlined
+} from '@ant-design/icons'
+import type { AppSettingsView, McpConfigStatus } from '@shared/types'
 import { getApi } from '../api'
 
-type SettingsTabKey = 'general' | 'ai'
+type SettingsTabKey = 'general' | 'ai' | 'mcp'
 
 /**
- * 设置页：常规（同步、落盘）与 AI（模型、提示词）分 Tab 配置
+ * 设置页：常规 / AI / MCP 分 Tab 配置
  */
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AppSettingsView | null>(null)
@@ -25,6 +41,11 @@ export default function SettingsPage() {
   const [savingAi, setSavingAi] = useState(false)
   const [testingAi, setTestingAi] = useState(false)
 
+  const [mcpStatus, setMcpStatus] = useState<McpConfigStatus | null>(null)
+  const [mcpBusy, setMcpBusy] = useState(false)
+  const [mcpEnabledDraft, setMcpEnabledDraft] = useState(true)
+  const [mcpPortDraft, setMcpPortDraft] = useState(39281)
+
   const applySettings = (next: AppSettingsView): void => {
     setSettings(next)
     setIntervalDraft(next.syncIntervalMinutes)
@@ -35,15 +56,37 @@ export default function SettingsPage() {
     setAiUserPromptTemplate(
       next.aiUserPromptTemplate || next.defaultAiUserPromptTemplate
     )
+    if (typeof next.mcpEnabled === 'boolean') setMcpEnabledDraft(next.mcpEnabled)
+    if (typeof next.mcpPort === 'number') setMcpPortDraft(next.mcpPort)
   }
 
   const refresh = async (): Promise<void> => {
     applySettings(await getApi().settings.get())
   }
 
+  const refreshMcp = async (): Promise<void> => {
+    const api = getApi()
+    if (typeof api.mcp?.getStatus !== 'function') {
+      throw new Error(
+        '桥接未更新：请完全退出应用后重新执行 pnpm dev（仅刷新页面无效）'
+      )
+    }
+    const status = await api.mcp.getStatus()
+    setMcpStatus(status)
+    setMcpEnabledDraft(status.enabled)
+    setMcpPortDraft(status.port)
+  }
+
   useEffect(() => {
     void refresh()
   }, [])
+
+  useEffect(() => {
+    if (activeTab !== 'mcp') return
+    void refreshMcp().catch((e) => {
+      message.error(e instanceof Error ? e.message : String(e))
+    })
+  }, [activeTab])
 
   const pickDir = async (): Promise<void> => {
     setLoading(true)
@@ -163,6 +206,71 @@ export default function SettingsPage() {
       setTestingAi(false)
     }
   }
+
+  const copyMcpConfig = async (): Promise<void> => {
+    if (!mcpStatus?.configJson) return
+    try {
+      await navigator.clipboard.writeText(mcpStatus.configJson)
+      message.success('已复制 MCP 配置 JSON')
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  const copyMcpEndpoint = async (): Promise<void> => {
+    if (!mcpStatus?.endpointUrl) return
+    try {
+      await navigator.clipboard.writeText(mcpStatus.endpointUrl)
+      message.success('已复制端点 URL')
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  const saveMcp = async (): Promise<void> => {
+    setMcpBusy(true)
+    try {
+      const api = getApi()
+      if (typeof api.mcp?.setSettings !== 'function') {
+        throw new Error(
+          '桥接未更新：请完全退出应用后重新执行 pnpm dev（仅刷新页面无效）'
+        )
+      }
+      const status = await api.mcp.setSettings({
+        mcpEnabled: mcpEnabledDraft,
+        mcpPort: mcpPortDraft
+      })
+      setMcpStatus(status)
+      applySettings(await api.settings.get())
+      if (status.enabled && status.running) {
+        message.success(`MCP 已启动：${status.endpointUrl}`)
+      } else if (!status.enabled) {
+        message.success('已关闭 MCP 服务')
+      } else {
+        message.warning(status.lastError || 'MCP 未在监听，请检查端口')
+      }
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setMcpBusy(false)
+    }
+  }
+
+  const restartMcp = async (): Promise<void> => {
+    setMcpBusy(true)
+    try {
+      setMcpStatus(await getApi().mcp.restart())
+      message.success('已按当前设置重启 MCP')
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setMcpBusy(false)
+    }
+  }
+
+  const mcpDirty =
+    mcpStatus != null &&
+    (mcpEnabledDraft !== mcpStatus.enabled || mcpPortDraft !== mcpStatus.port)
 
   const defaultInterval = settings?.defaultSyncIntervalMinutes ?? 30
   const defaultLookback = settings?.defaultSyncLookbackDays ?? 90
@@ -421,6 +529,111 @@ export default function SettingsPage() {
                     </Button>
                     <Button loading={testingAi} onClick={() => void testAi()}>
                       测试连接
+                    </Button>
+                  </Space>
+                </Space>
+              </div>
+            )
+          },
+          {
+            key: 'mcp',
+            label: 'MCP',
+            children: (
+              <div className="settings-block">
+                <h3>MCP 服务</h3>
+                <p className="page-desc" style={{ marginBottom: 12 }}>
+                  在本机提供只读 HTTP MCP。任意支持 MCP 的客户端把下方配置粘贴进各自的 mcp.json
+                  即可拉取提交并总结。
+                </p>
+                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                  <Space wrap size={[8, 8]} align="center">
+                    {mcpStatus?.running ? (
+                      <Tag color="green">运行中</Tag>
+                    ) : mcpStatus?.enabled ? (
+                      <Tag color="red">未监听</Tag>
+                    ) : (
+                      <Tag>已关闭</Tag>
+                    )}
+                    {mcpStatus?.lastError ? (
+                      <Tag color="orange">{mcpStatus.lastError}</Tag>
+                    ) : null}
+                  </Space>
+                  <Space wrap align="center">
+                    <span style={{ width: 96 }}>随应用启动</span>
+                    <Switch checked={mcpEnabledDraft} onChange={setMcpEnabledDraft} />
+                  </Space>
+                  <Space wrap align="center">
+                    <span style={{ width: 96 }}>端口</span>
+                    <InputNumber
+                      min={1024}
+                      max={65535}
+                      value={mcpPortDraft}
+                      onChange={(v) =>
+                        setMcpPortDraft(
+                          typeof v === 'number'
+                            ? v
+                            : (mcpStatus?.defaultPort ?? settings?.defaultMcpPort ?? 39281)
+                        )
+                      }
+                      style={{ width: 140 }}
+                    />
+                    <span className="muted">仅监听 127.0.0.1</span>
+                  </Space>
+                  <div>
+                    <div className="muted" style={{ marginBottom: 4 }}>
+                      端点
+                    </div>
+                    <Typography.Text copyable={Boolean(mcpStatus?.endpointUrl)}>
+                      {mcpStatus?.endpointUrl || '加载中…'}
+                    </Typography.Text>
+                  </div>
+                  <div>
+                    <div className="muted" style={{ marginBottom: 6 }}>
+                      客户端配置示例（复制到任意编辑器的 mcp.json）
+                    </div>
+                    <Input.TextArea
+                      value={mcpStatus?.configJson || ''}
+                      readOnly
+                      autoSize={{ minRows: 8, maxRows: 14 }}
+                      style={{
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+                      }}
+                    />
+                  </div>
+                  <Space wrap>
+                    <Button
+                      type="primary"
+                      loading={mcpBusy}
+                      disabled={!mcpDirty}
+                      onClick={() => void saveMcp()}
+                    >
+                      保存并应用
+                    </Button>
+                    <Button
+                      icon={<CopyOutlined />}
+                      disabled={!mcpStatus?.configJson}
+                      onClick={() => void copyMcpConfig()}
+                    >
+                      复制配置
+                    </Button>
+                    <Button
+                      disabled={!mcpStatus?.endpointUrl}
+                      onClick={() => void copyMcpEndpoint()}
+                    >
+                      复制端点
+                    </Button>
+                    <Button loading={mcpBusy} onClick={() => void restartMcp()}>
+                      重启服务
+                    </Button>
+                    <Button
+                      loading={mcpBusy}
+                      onClick={() =>
+                        void refreshMcp().catch((e) =>
+                          message.error(e instanceof Error ? e.message : String(e))
+                        )
+                      }
+                    >
+                      刷新状态
                     </Button>
                   </Space>
                 </Space>

@@ -1,6 +1,12 @@
 import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { v4 as uuid } from 'uuid'
-import type { AccountInput, AccountUpdate, CommitsQuery, ReportRequest } from '@shared/types'
+import type {
+  AccountInput,
+  AccountUpdate,
+  CommitsQuery,
+  McpSettingsInput,
+  ReportRequest
+} from '@shared/types'
 import {
   createAccount,
   deleteAccount,
@@ -28,11 +34,14 @@ import {
   loadSettings,
   setAiSettings,
   setExportsPathSetting,
+  setMcpSettings,
   setSyncIntervalMinutes,
   setSyncLookbackDays,
   type AiSettingsPatch
 } from './settings'
 import { rescheduleAll, scheduleAccount, syncAccount } from './sync'
+import { getMcpConfigStatus } from './mcpConfig'
+import { applyMcpHttpFromSettings, DEFAULT_MCP_PORT } from './mcp/httpServer'
 import { deleteAiApiKey, hasAiApiKey, saveAiApiKey } from './vault'
 
 export function registerIpc(): void {
@@ -203,7 +212,10 @@ export function registerIpc(): void {
       defaultAiModel: DEFAULT_AI_MODEL,
       defaultAiDailyAt: DEFAULT_AI_DAILY_AT,
       defaultAiSystemPrompt: DEFAULT_AI_SYSTEM_PROMPT,
-      defaultAiUserPromptTemplate: DEFAULT_AI_USER_PROMPT_TEMPLATE
+      defaultAiUserPromptTemplate: DEFAULT_AI_USER_PROMPT_TEMPLATE,
+      mcpEnabled: s.mcpEnabled,
+      mcpPort: s.mcpPort,
+      defaultMcpPort: DEFAULT_MCP_PORT
     }
   }
 
@@ -256,6 +268,24 @@ export function registerIpc(): void {
     }
     setExportsPathSetting(result.filePaths[0])
     return settingsDto()
+  })
+
+  ipcMain.handle('mcp:getStatus', () => getMcpConfigStatus())
+  ipcMain.handle('mcp:setSettings', async (_e, patch: McpSettingsInput) => {
+    const next = setMcpSettings(patch || {})
+    await applyMcpHttpFromSettings({
+      enabled: next.mcpEnabled,
+      port: next.mcpPort
+    })
+    return getMcpConfigStatus()
+  })
+  ipcMain.handle('mcp:restart', async () => {
+    const s = loadSettings()
+    await applyMcpHttpFromSettings({
+      enabled: s.mcpEnabled,
+      port: s.mcpPort
+    })
+    return getMcpConfigStatus()
   })
 }
 

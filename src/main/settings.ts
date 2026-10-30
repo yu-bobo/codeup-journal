@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
+import { clampMcpPort, DEFAULT_MCP_PORT } from './mcp/httpServer'
 
 export interface AppSettings {
   // 材料根目录；空则使用默认 userData/exports
@@ -19,6 +20,9 @@ export interface AppSettings {
   aiUserPromptTemplate: string
   // 上次成功跑完定时 AI 日报的本地日期 YYYY-MM-DD（防同日重复）
   lastAiDailyDate: string
+  // 随应用启动本机 HTTP MCP（供任意 MCP 客户端接入）
+  mcpEnabled: boolean
+  mcpPort: number
 }
 
 export const DEFAULT_SYNC_INTERVAL_MINUTES = 30
@@ -132,7 +136,9 @@ const DEFAULT: AppSettings = {
   aiDailyAt: DEFAULT_AI_DAILY_AT,
   aiSystemPrompt: DEFAULT_AI_SYSTEM_PROMPT,
   aiUserPromptTemplate: DEFAULT_AI_USER_PROMPT_TEMPLATE,
-  lastAiDailyDate: ''
+  lastAiDailyDate: '',
+  mcpEnabled: true,
+  mcpPort: DEFAULT_MCP_PORT
 }
 
 function settingsFile(): string {
@@ -207,7 +213,9 @@ export function loadSettings(): AppSettings {
       exportsPath: typeof raw.exportsPath === 'string' ? raw.exportsPath : '',
       syncIntervalMinutes: clampSyncIntervalMinutes(raw.syncIntervalMinutes),
       syncLookbackDays: clampSyncLookbackDays(raw.syncLookbackDays),
-      ...normalizeAiSettings(raw)
+      ...normalizeAiSettings(raw),
+      mcpEnabled: raw.mcpEnabled !== undefined ? Boolean(raw.mcpEnabled) : true,
+      mcpPort: clampMcpPort(raw.mcpPort)
     }
   } catch {
     return { ...DEFAULT }
@@ -238,16 +246,28 @@ export function saveSettings(patch: Partial<AppSettings>): AppSettings {
         ? patch.aiUserPromptTemplate
         : current.aiUserPromptTemplate,
     lastAiDailyDate:
-      patch.lastAiDailyDate !== undefined ? patch.lastAiDailyDate : current.lastAiDailyDate
+      patch.lastAiDailyDate !== undefined ? patch.lastAiDailyDate : current.lastAiDailyDate,
+    mcpEnabled:
+      patch.mcpEnabled !== undefined ? Boolean(patch.mcpEnabled) : current.mcpEnabled,
+    mcpPort: patch.mcpPort !== undefined ? clampMcpPort(patch.mcpPort) : current.mcpPort
   }
   const next: AppSettings = {
     exportsPath: merged.exportsPath,
     syncIntervalMinutes: merged.syncIntervalMinutes,
     syncLookbackDays: merged.syncLookbackDays,
-    ...normalizeAiSettings(merged)
+    ...normalizeAiSettings(merged),
+    mcpEnabled: merged.mcpEnabled,
+    mcpPort: clampMcpPort(merged.mcpPort)
   }
   writeFileSync(settingsFile(), JSON.stringify(next, null, 2), 'utf8')
   return next
+}
+
+export function setMcpSettings(patch: {
+  mcpEnabled?: boolean
+  mcpPort?: number
+}): AppSettings {
+  return saveSettings(patch)
 }
 
 export function getExportsPathSetting(): string {
