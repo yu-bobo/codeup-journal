@@ -175,10 +175,16 @@ export const db = {
     save(data)
   },
 
-  listSyncLogs(accountId: string, limit = 50): SyncLog[] {
-    return load()
-      .syncLogs.filter((l) => l.accountId === accountId)
-      .slice(0, limit)
+  listSyncLogs(
+    accountId: string,
+    limit = 20,
+    offset = 0
+  ): { items: SyncLog[]; total: number } {
+    const all = load().syncLogs.filter((l) => l.accountId === accountId)
+    return {
+      items: all.slice(offset, offset + limit),
+      total: all.length
+    }
   },
 
   deleteAccountData(accountId: string): void {

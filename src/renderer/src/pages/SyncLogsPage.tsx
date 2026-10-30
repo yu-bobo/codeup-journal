@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Space, Table, Tag, message } from 'antd'
+import { Button, Pagination, Space, Table, Tag, message } from 'antd'
 import { ProfileOutlined, ReloadOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import type { Account, SyncLog } from '@shared/types'
@@ -9,13 +9,15 @@ interface Props {
   account: Account | null
 }
 
+const PAGE_SIZE = 20
+
 const LEVEL_META: Record<
   SyncLog['level'],
   { color: string; label: string }
 > = {
-  info: { color: 'blue', label: '信息' },
-  warn: { color: 'orange', label: '警告' },
-  error: { color: 'red', label: '错误' }
+  info: { color: 'processing', label: '信息' },
+  warn: { color: 'warning', label: '警告' },
+  error: { color: 'error', label: '错误' }
 }
 
 /**
@@ -23,16 +25,28 @@ const LEVEL_META: Record<
  */
 export default function SyncLogsPage({ account }: Props) {
   const [logs, setLogs] = useState<SyncLog[]>([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(PAGE_SIZE)
 
-  const load = async (): Promise<void> => {
+  const load = async (nextPage = page, nextSize = pageSize): Promise<void> => {
     if (!account) {
       setLogs([])
+      setTotal(0)
       return
     }
     setLoading(true)
     try {
-      setLogs(await getApi().sync.logs(account.id))
+      const result = await getApi().sync.logs(
+        account.id,
+        nextSize,
+        (nextPage - 1) * nextSize
+      )
+      setLogs(result.items)
+      setTotal(result.total)
+      setPage(nextPage)
+      setPageSize(nextSize)
     } catch (e: unknown) {
       message.error(e instanceof Error ? e.message : String(e))
     } finally {
@@ -41,7 +55,7 @@ export default function SyncLogsPage({ account }: Props) {
   }
 
   useEffect(() => {
-    void load()
+    void load(1, pageSize)
   }, [account?.id])
 
   if (!account) {
@@ -63,12 +77,16 @@ export default function SyncLogsPage({ account }: Props) {
       <div className="page-header">
         <h2 className="page-title">日志</h2>
         <Space>
-          <Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading}>
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => void load(page, pageSize)}
+            loading={loading}
+          >
             刷新
           </Button>
         </Space>
       </div>
-      <p className="page-desc">当前账号最近 50 条同步记录；错误行可查看具体仓库失败原因。</p>
+      <p className="page-desc">当前账号同步记录；错误行可查看具体仓库失败原因。</p>
       <div className="table-scroll">
         <Table
           rowKey="id"
@@ -101,6 +119,21 @@ export default function SyncLogsPage({ account }: Props) {
               )
             }
           ]}
+        />
+      </div>
+
+      <div className="table-pager">
+        <Pagination
+          current={page}
+          pageSize={pageSize}
+          total={total}
+          showSizeChanger
+          showQuickJumper
+          pageSizeOptions={[10, 20, 50, 100]}
+          showTotal={(t) => `共 ${t} 条`}
+          onChange={(p, size) => {
+            void load(p, size)
+          }}
         />
       </div>
     </div>

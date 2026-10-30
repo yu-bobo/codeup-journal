@@ -981,7 +981,26 @@ html[data-theme='dark'] .app-sider .ant-menu-item-selected {
   border-color: var(--control-focus) !important;
 }
 
-.page-card .ant-tag {
+/* 仅统一无 color 的默认 Tag；带预设色 / 自定义色的保留 antd 配色 */
+.page-card
+  .ant-tag:not(
+    .ant-tag-has-color,
+    .ant-tag-success,
+    .ant-tag-processing,
+    .ant-tag-error,
+    .ant-tag-warning,
+    .ant-tag-magenta,
+    .ant-tag-red,
+    .ant-tag-volcano,
+    .ant-tag-orange,
+    .ant-tag-gold,
+    .ant-tag-lime,
+    .ant-tag-green,
+    .ant-tag-cyan,
+    .ant-tag-blue,
+    .ant-tag-geekblue,
+    .ant-tag-purple
+  ) {
   background: var(--tag-bg);
   border-color: var(--tag-border);
   color: var(--color-ink);

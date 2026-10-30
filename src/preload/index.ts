@@ -62,7 +62,12 @@ const api = {
   sync: {
     run: (accountId: string, repoIds?: number[]): Promise<SyncResult> =>
       ipcRenderer.invoke('sync:run', accountId, repoIds),
-    logs: (accountId: string): Promise<SyncLog[]> => ipcRenderer.invoke('sync:logs', accountId)
+    logs: (
+      accountId: string,
+      limit?: number,
+      offset?: number
+    ): Promise<{ items: SyncLog[]; total: number }> =>
+      ipcRenderer.invoke('sync:logs', accountId, limit, offset)
   },
   reports: {
     generate: (req: ReportRequest): Promise<ReportResult> =>

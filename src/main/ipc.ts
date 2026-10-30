@@ -130,7 +130,11 @@ export function registerIpc(): void {
   ipcMain.handle('sync:run', async (_e, accountId: string, repoIds?: number[]) =>
     syncAccount(accountId, repoIds)
   )
-  ipcMain.handle('sync:logs', (_e, accountId: string) => db.listSyncLogs(accountId))
+  ipcMain.handle(
+    'sync:logs',
+    (_e, accountId: string, limit?: number, offset?: number) =>
+      db.listSyncLogs(accountId, limit, offset)
+  )
 
   ipcMain.handle('reports:generate', (_e, req: ReportRequest) => generateReport(req, true))
   ipcMain.handle('reports:preview', (_e, req: ReportRequest) => generateReport(req, false))
