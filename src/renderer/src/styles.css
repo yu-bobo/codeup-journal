@@ -591,6 +591,16 @@ html[data-theme='dark'] .app-sider .ant-menu-item-selected {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 头部/工具栏固定高度，预览块按剩余空间自适应，避免出现双滚动条 */
+.page-with-drawer-body > .page-header,
+.page-with-drawer-body > .page-desc,
+.page-with-drawer-body > .toolbar,
+.page-with-drawer-body > p {
+  flex-shrink: 0;
 }
 
 .page-card.page-with-drawer > .ant-drawer {
@@ -718,8 +728,32 @@ html[data-theme='dark'] .app-sider .ant-menu-item-selected {
     0 0 20px var(--report-glow);
 }
 
+/* 页内预览：高度交给 flex 剩余空间，短内容不拉伸、长内容填满后内部滚动 */
+.page-with-drawer-body > .report-preview {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
 .report-preview-drawer {
   max-height: calc(100vh - 160px);
+}
+
+/* AI 结果抽屉同样只保留终端块自身的滚动条（特异性高于 antd 的 .ant-drawer-body） */
+.page-card .page-local-drawer .ant-drawer-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.page-card .page-local-drawer .ant-drawer-body > p {
+  flex-shrink: 0;
+}
+
+.page-card .page-local-drawer .ant-drawer-body > .report-preview-drawer {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: none;
 }
 
 .commit-msg-cell {
