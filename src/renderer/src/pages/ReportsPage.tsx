@@ -7,11 +7,27 @@ import {
   ThunderboltOutlined
 } from '@ant-design/icons'
 import dayjs, { type Dayjs } from 'dayjs'
+import isoWeek from 'dayjs/plugin/isoWeek'
 import type { Account, AppSettingsView, ReportKind, ReportResult } from '@shared/types'
 import { getApi } from '../api'
 
+dayjs.extend(isoWeek)
+
 interface Props {
   account: Account | null
+}
+
+/** 锚点日期是否已经落在该类型的“当前”周期里 */
+function isCurrentPeriod(kind: ReportKind, date: Dayjs): boolean {
+  if (kind === 'custom') return true
+  const now = dayjs()
+  if (kind === 'week') {
+    return (
+      date.isoWeek() === now.isoWeek() && date.isoWeekYear() === now.isoWeekYear()
+    )
+  }
+  if (kind === 'month') return date.isSame(now, 'month')
+  return date.isSame(now, 'day')
 }
 
 /**
@@ -65,6 +81,14 @@ export default function ReportsPage({ account }: Props) {
       accountId: account.id,
       kind,
       date: date.format('YYYY-MM-DD')
+    }
+  }
+
+  // 切换报告类型时，若锚点不在该类型的当前周期，回到今天，避免沿用上次（如月报的 10-01）算出意外周次
+  const changeKind = (next: ReportKind): void => {
+    setKind(next)
+    if (next !== 'custom' && !isCurrentPeriod(next, date)) {
+      setDate(dayjs())
     }
   }
 
@@ -142,7 +166,7 @@ export default function ReportsPage({ account }: Props) {
         <div className="toolbar">
           <Radio.Group
             value={kind}
-            onChange={(e) => setKind(e.target.value)}
+            onChange={(e) => changeKind(e.target.value)}
             optionType="button"
             options={[
               { label: '日报', value: 'day' },
